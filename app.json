@@ -1,0 +1,48 @@
+{
+  "name": "BioLink Protector Bot",
+  "description": "A Telegram bot that automatically monitors user bios in group chats for links and can warn, mute, or ban users based on configurable settings.",
+  "keywords": [
+    "telegram",
+    "bot",
+    "python",
+    "moderation",
+    "biolink"
+  ],
+  "website": "https://github.com/strad-dev131/BioLink-Protector",
+  "repository": "https://github.com/strad-dev131/BioLink-Protector",
+  "logo": "https://telegra.ph/file/8cc49d7c6de3edf60b4c7.png",
+  "success_url": "/",
+  "scripts": {
+    "postdeploy": "echo 'Bot deployed successfully! Configure your bot token and MongoDB URI in the environment variables.'"
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "env": {
+    "API_ID": {
+      "description": "Your Telegram API ID from my.telegram.org",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Your Telegram API Hash from my.telegram.org",
+      "required": true
+    },
+    "BOT_TOKEN": {
+      "description": "Your Bot Token from @BotFather",
+      "required": true
+    },
+    "MONGO_URI": {
+      "description": "Your MongoDB connection string (e.g., from MongoDB Atlas)",
+      "required": true
+    }
+  },
+  "addons": [],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ]
+}
