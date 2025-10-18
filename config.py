@@ -9,6 +9,9 @@ API_ID = int(os.environ.get("API_ID", "12345678"))  # Your Telegram API ID
 API_HASH = os.environ.get("API_HASH", "12345678abcd")  # Your Telegram API Hash
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "7267436522:XXXXXXXXXXXXXXXXXX")  # Your Bot Token
 
+# Owner ID for privileged commands like /broadcast
+OWNER_ID = int(os.environ.get("OWNER_ID", "0"))  # Set this to your Telegram user ID
+
 # MongoDB connection URI
 MONGO_URI = os.environ.get("MONGO_URI", "your_mongodb_url")
 

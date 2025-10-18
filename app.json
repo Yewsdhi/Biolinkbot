@@ -37,6 +37,10 @@
     "MONGO_URI": {
       "description": "Your MongoDB connection string (e.g., from MongoDB Atlas)",
       "required": true
+    },
+    "OWNER_ID": {
+      "description": "Your Telegram numeric user ID to enable /broadcast command",
+      "required": true
     }
   },
   "addons": [],

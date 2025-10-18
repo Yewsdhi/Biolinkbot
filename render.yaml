@@ -15,3 +15,5 @@ services:
         sync: false
       - key: MONGO_URI
         sync: false
+      - key: OWNER_ID
+        sync: false
