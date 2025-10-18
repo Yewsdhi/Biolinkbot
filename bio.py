@@ -63,8 +63,8 @@ async def help_handler(client: Client, message):
         "`/freelist` – list all whitelisted users\n\n"
         "**When someone with a URL in their bio posts, I’ll:**\n"
         " 1. ⚠️ Warn them\n"
-        " 2. 🔇 Mute if they exceed limit\n"
-        " 5. 🔨 Ban if set to ban\n\n"
+        " 2. 🔇 Mute when they exceed the limit (if set)\n"
+        " 3. 🔨 Ban when configured to ban\n\n"
         "**Use the inline buttons on warnings to cancel or whitelist**"
     )
     kb = InlineKeyboardMarkup([
@@ -312,14 +312,19 @@ async def check_bio(client: Client, message):
     if await is_admin(client, chat_id, user_id) or await is_whitelisted(chat_id, user_id):
         return
 
-    # Prefer get_users for user info; fallback to get_chat
+    # Prefer get_chat for bio; fallback to get_users
     try:
-        user = await client.get_users(user_id)
+        chat = await client.get_chat(user_id)
+        bio = getattr(chat, "bio", "") or ""
+        first_name = getattr(chat, "first_name", "") or ""
+        last_name = getattr(chat, "last_name", None)
     except Exception:
-        user = await client.get_chat(user_id)
+        usr = await client.get_users(user_id)
+        bio = getattr(usr, "bio", "") or ""
+        first_name = getattr(usr, "first_name", "") or ""
+        last_name = getattr(usr, "last_name", None)
 
-    bio = getattr(user, "bio", "") or ""
-    full_name = f"{user.first_name}{(' ' + user.last_name) if getattr(user, 'last_name', None) else ''}"
+    full_name = f"{first_name}{(' ' + last_name) if last_name else ''}"
     mention = f"[{full_name}](tg://user?id={user_id})"
 
     if URL_PATTERN.search(bio):
