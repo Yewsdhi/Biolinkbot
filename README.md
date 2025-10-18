@@ -76,3 +76,87 @@ python bio.py
 - Telegram: [@TeamXUpdate](https://t.me/TeamXUpdate)
 
 Feel free to reach out if you have any questions or feedback.
+
+---
+
+## What's new in this build
+
+- Smarter link detection:
+  - http/https/ftp, www.*
+  - bare domains and subdomains
+  - IPv4/IPv6 addresses with optional ports
+  - emails
+  - Telegram @usernames
+- Faster and more reliable:
+  - Admin check optimized with get_chat_member + caching
+  - Config and whitelist caching to reduce DB round-trips
+  - Atomic warning increments with Mongo find_one_and_update
+  - Optional uvloop for high-performance event loop on Linux/VPS
+- 24×7 ready:
+  - Works on any VPS (Docker and systemd examples below)
+  - One-click deploy to Heroku and Render
+
+## Deploy options
+
+### Local/VPS (bare metal)
+- Install dependencies
+  - Python 3.12 recommended
+  - MongoDB (Atlas connection also works)
+- Set environment variables (or set values directly in config.py):
+  - API_ID, API_HASH, BOT_TOKEN, MONGO_URI
+- Run: `python bio.py`
+
+### Docker
+A Dockerfile is included. Build and run:
+
+```bash
+docker build -t biolink-protector .
+docker run --rm -it \
+  -e API_ID=12345 \
+  -e API_HASH=your_api_hash \
+  -e BOT_TOKEN=12345:bot_token \
+  -e MONGO_URI='mongodb+srv://...' \
+  biolink-protector
+```
+
+### Heroku (1-click)
+Use the button or the dashboard to deploy. Ensure all env vars are set.
+
+[Deploy to Heroku](https://heroku.com/deploy?template=https://github.com/strad-dev131/BioLink-Protector)
+
+### Render
+A render.yaml is included. Create a Worker service:
+
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `python bio.py`
+- Add env vars: API_ID, API_HASH, BOT_TOKEN, MONGO_URI
+
+### Systemd (VPS) example
+Create `/etc/systemd/system/biolink-protector.service`:
+
+```
+[Unit]
+Description=BioLink Protector Telegram Bot
+After=network.target
+
+[Service]
+User=youruser
+WorkingDirectory=/opt/biolink-protector
+Environment=API_ID=12345
+Environment=API_HASH=your_api_hash
+Environment=BOT_TOKEN=12345:bot_token
+Environment=MONGO_URI=mongodb+srv://...
+ExecStart=/usr/bin/python3 /opt/biolink-protector/bio.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now biolink-protector
+```
