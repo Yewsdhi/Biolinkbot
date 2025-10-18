@@ -1,8 +1,8 @@
-"""
+""""
 Author: Elite Sid
 User: https://t.me/SID_ELITE
 Channel: https://t.me/TeamXUpdate
-"""
+""""
 
 from pyrogram import Client, filters, errors
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
