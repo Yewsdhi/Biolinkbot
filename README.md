@@ -44,12 +44,14 @@ pip install -r requirements.txt
 ## Configuration
 
 1. Open the `config.py` file in your favorite text editor.  
-2. Replace the placeholders for `API_ID`, `API_HASH`, `BOT_TOKEN`, `MONGO_URI`, and `OWNER_ID` with your actual values (or set them as environment variables):  
+2. Set the following values (or provide them as environment variables):  
    - **`API_ID`**: Your API ID from [my.telegram.org](https://my.telegram.org).  
    - **`API_HASH`**: Your API Hash from [my.telegram.org](https://my.telegram.org).  
    - **`BOT_TOKEN`**: The token you obtained from [@BotFather](https://t.me/BotFather).  
    - **`MONGO_URI`**: Your MongoDB connection string (e.g., from [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)).  
    - **`OWNER_ID`**: Your Telegram numeric user ID to allow the privileged `/broadcast` command.  
+   - Optional broadcast extras: **`BROADCAST_CHAT_IDS`** – comma-separated chat IDs to always include in `/broadcast` (e.g., `12345,-100987654321`).  
+   - Spam protection tuning: **`SPAM_WINDOW_SEC`** and **`SPAM_MAX_MSG`** to control mass-spam detection window and threshold.  
 
 ## Deploy the Bot
 

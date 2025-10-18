@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, Set, List
+from typing import Dict, Tuple, Set, List, Optional
 import time
 
 from pyrogram import Client, enums
@@ -10,6 +10,9 @@ from config import (
     DEFAULT_CONFIG,
     DEFAULT_PUNISHMENT,
     DEFAULT_WARNING_LIMIT,
+    BROADCAST_EXTRA_CHAT_IDS,
+    SPAM_WINDOW_SEC,
+    SPAM_MAX_MSG,
 )
 
 # Mongo
@@ -25,7 +28,10 @@ _ADMIN_CACHE: Dict[Tuple[int, int], Tuple[bool, float]] = {}          # (chat_id
 _CONFIG_CACHE: Dict[int, Tuple[Tuple[str, int, str], float]] = {}     # chat_id -> ((mode, limit, penalty), expires_at)
 _WHITELIST_CACHE: Dict[int, Tuple[Set[int], float]] = {}              # chat_id -> (set(user_ids), expires_at)
 _CHATS_CACHE: Tuple[Set[int], float] = (set(), 0.0)                   # (chat_ids, expires_at)
-_BIO_CACHE: Dict[int, Tuple[Tuple[str, str, str | None], float]] = {} # user_id -> ((bio, first_name, last_name), expires_at)
+_BIO_CACHE: Dict[int, Tuple[Tuple[str, str, Optional[str]], float]] = {} # user_id -> ((bio, first_name, last_name), expires_at)
+
+# Simple spam tracker: (chat_id, user_id) -> (window_start, count)
+_SPAM_TRACKER: Dict[Tuple[int, int], Tuple[float, int]] = {}
 
 ADMIN_TTL = 300.0        # 5 minutes
 CONFIG_TTL = 600.0       # 10 minutes
@@ -179,17 +185,20 @@ async def add_chat(chat_id: int):
 async def get_all_chats() -> List[int]:
     chat_ids, exp = _CHATS_CACHE
     if exp > _now() and chat_ids:
-        return list(sorted(chat_ids))
+        # union with extra chat ids
+        return list(sorted(set(chat_ids).union(set(BROADCAST_EXTRA_CHAT_IDS))))
 
     cursor = chats_collection.find({})
     docs = await cursor.to_list(length=None)
     chat_ids = {int(doc.get("chat_id")) for doc in docs}
+    # union with configured extras
+    chat_ids.update(BROADCAST_EXTRA_CHAT_IDS)
     _CHATS_CACHE = (chat_ids, _now() + CHATS_TTL)
     return list(sorted(chat_ids))
 
 
 # Bio cache helpers to reduce API load
-async def get_user_profile_cached(client: Client, user_id: int) -> Tuple[str, str, str | None]:
+async def get_user_profile_cached(client: Client, user_id: int) -> Tuple[str, str, Optional[str]]:
     cached = _BIO_CACHE.get(user_id)
     if cached and cached[1] > _now():
         bio, first_name, last_name = cached[0]
@@ -209,3 +218,17 @@ async def get_user_profile_cached(client: Client, user_id: int) -> Tuple[str, st
 
     _BIO_CACHE[user_id] = ((bio, first_name, last_name), _now() + BIO_TTL)
     return bio, first_name, last_name
+
+
+# Spam tracking: register a message event and return True if user is spamming within window.
+def register_message_event(chat_id: int, user_id: int) -> bool:
+    key = (chat_id, user_id)
+    now = _now()
+    window_start, count = _SPAM_TRACKER.get(key, (now, 0))
+    if now - window_start > SPAM_WINDOW_SEC:
+        # reset window
+        window_start, count = now, 1
+    else:
+        count += 1
+    _SPAM_TRACKER[key] = (window_start, count)
+    return count >= SPAM_MAX_MSG

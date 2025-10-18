@@ -15,6 +15,7 @@ from helper.utils import (
     is_whitelisted, add_whitelist, remove_whitelist, get_whitelist,
     add_chat, get_all_chats,
     get_user_profile_cached,
+    register_message_event,
 )
 
 from config import (
@@ -35,6 +36,8 @@ app = Client(
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message):
     chat_id = message.chat.id
+    # Register this chat (private or group) for broadcasts
+    await add_chat(chat_id)
     bot = await client.get_me()
     add_url = f"https://t.me/{bot.username}?startgroup=true"
     text = (
@@ -370,11 +373,31 @@ async def check_bio(client: Client, message):
     full_name = f"{first_name}{(' ' + last_name) if last_name else ''}"
     mention = f"[{full_name}](tg://user?id={user_id})"
 
+    # Register message for spam tracking
+    is_spammer = register_message_event(chat_id, user_id)
+
     if URL_PATTERN.search(bio):
         try:
             await message.delete()
         except errors.MessageDeleteForbidden:
             return await message.reply_text("Please grant me delete permission.")
+
+        # If user is mass spamming and has link in bio, apply immediate penalty
+        if is_spammer:
+            try:
+                # Default to mute for immediate action; respect configured penalty if available
+                _, _, penalty = await get_config(chat_id)
+                if penalty == "mute":
+                    await client.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False))
+                    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unmute ✅", callback_data=f"unmute_{user_id}")]])
+                    await message.reply_text(f"**{mention} has been 🔇 muted for mass spamming with link in bio.**", reply_markup=kb)
+                else:
+                    await client.ban_chat_member(chat_id, user_id)
+                    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unban ✅", callback_data=f"unban_{user_id}")]])
+                    await message.reply_text(f"**{mention} has been 🔨 banned for mass spamming with link in bio.**", reply_markup=kb)
+            except errors.ChatAdminRequired:
+                await message.reply_text("I don't have permission to restrict/ban users.")
+            return
 
         mode, limit, penalty = await get_config(chat_id)
         if mode == "warn":
