@@ -1,5 +1,7 @@
 from typing import Dict, Tuple, Set, List, Optional
 import time
+import re
+import unicodedata
 
 from pyrogram import Client, enums
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -13,7 +15,14 @@ from config import (
     BROADCAST_EXTRA_CHAT_IDS,
     SPAM_WINDOW_SEC,
     SPAM_MAX_MSG,
+    URL_PATTERN,
 )
+
+# Fail fast with a clear error if MONGO_URI is not configured
+if not MONGO_URI or "mongodb" not in MONGO_URI:
+    raise ValueError(
+        "MONGO_URI is not configured. Please set a valid MongoDB URI in environment or config.py."
+    )
 
 # Mongo
 mongo_client = AsyncIOMotorClient(MONGO_URI)
@@ -196,6 +205,93 @@ async def get_all_chats() -> List[int]:
     chat_ids.update(BROADCAST_EXTRA_CHAT_IDS)
     _CHATS_CACHE = (chat_ids, _now() + CHATS_TTL)
     return list(sorted(chat_ids))
+
+
+# Simple counts and stats helpers
+async def count_warnings(chat_id: int) -> int:
+    """
+    Sum of warning 'count' for a chat.
+    """
+    pipeline = [
+        {"$match": {"chat_id": chat_id}},
+        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$count", 0]}}}},
+    ]
+    cursor = warnings_collection.aggregate(pipeline)
+    docs = await cursor.to_list(length=1)
+    if docs:
+        return int(docs[0].get("total", 0))
+    return 0
+
+
+async def count_warning_records(chat_id: int) -> int:
+    """
+    Number of user records with warnings (not the sum).
+    """
+    return await warnings_collection.count_documents({"chat_id": chat_id})
+
+
+async def count_whitelist(chat_id: int) -> int:
+    return await whitelists_collection.count_documents({"chat_id": chat_id})
+
+
+async def total_chats() -> int:
+    # Use cache if alive
+    chat_ids, exp = _CHATS_CACHE
+    if exp > _now() and chat_ids:
+        return len(chat_ids)
+    # Fallback to DB
+    return await chats_collection.count_documents({})
+
+
+# Link normalization and detection
+_ZERO_WIDTH_RE = re.compile(r"[\u200B\u200C\u200D\u2060\uFEFF]")
+_DOT_WORD_RE = re.compile(r"(?i)\\b(?:d[\\W_]*o[\\W_]*t|\\(\\s*dot\\s*\\)|\\[\\s*dot\\s*\\]|\\{\\s*dot\\s*\\})\\b")
+_DOT_BRACKET_RE = re.compile(r"(?i)\\[\\s*\\.\\s*\\]|\\(\\s*\\.\\s*\\)|\\{\\s*\\.\\s*\\}")
+_AT_WORD_RE = re.compile(r"(?i)\\b(?:\\[\\s*at\\s*\\]|\\(\\s*at\\s*\\)|\\{\\s*at\\s*\\}|\\s+at\\s+)\\b")
+_HTTPS_SPACED_RE = re.compile(r"(?i)h\\s*t\\s*t\\s*p\\s*s")
+_HTTP_SPACED_RE = re.compile(r"(?i)h\\s*t\\s*t\\s*p")
+_COLON_SLASHES_RE = re.compile(r":\\s*/\\s*/")
+_WWW_SPACED_RE = re.compile(r"(?i)w\\s*w\\s*w\\s*\\.")
+_DOT_SPACES_RE = re.compile(r"(?i)([a-z0-9-])\\s*\\.\\s*([a-z0-9-])")
+_SLASH_SPACES_RE = re.compile(r"/\\s*/")
+_TME_SPACED_RE = re.compile(r"(?i)t\\s*\\.\\s*me\\b")
+_TELEGRAM_HOSTS_RE = re.compile(r"(?i)telegram\\s*\\.\\s*(?:me|dog|org)\\b|telegra\\s*\\.\\s*ph\\b")
+
+
+def normalize_for_links(text: str) -> str:
+    if not text:
+        return ""
+    s = unicodedata.normalize("NFKC", text)
+    s = _ZERO_WIDTH_RE.sub("", s)
+    s = _DOT_BRACKET_RE.sub(".", s)
+    s = _DOT_WORD_RE.sub(".", s)
+    s = _AT_WORD_RE.sub("@", s)
+    s = _COLON_SLASHES_RE.sub("://", s)
+    s = _WWW_SPACED_RE.sub("www.", s)
+    s = _TME_SPACED_RE.sub("t.me", s)
+    s = _TELEGRAM_HOSTS_RE.sub(lambda m: m.group(0).replace(" ", ""), s)
+    s = _HTTPS_SPACED_RE.sub("https", s)
+    s = _HTTP_SPACED_RE.sub("http", s)
+    s = _DOT_SPACES_RE.sub(r"\\1.\\2", s)
+    s = _SLASH_SPACES_RE.sub("/", s)
+    # collapse multiple spaces
+    s = re.sub(r"\\s{2,}", " ", s)
+    return s
+
+
+def contains_link(text: str) -> bool:
+    s = normalize_for_links(text)
+    if not s:
+        return False
+    if URL_PATTERN.search(s):
+        return True
+    # Accept @ with optional spaces after to catch @ username evasion
+    if re.search(r"(?i)(?<!\\w)@\\s*[\\w_]{4,32}", s):
+        return True
+    # common bare domain with accidental spaces that slipped normalization
+    if re.search(r"(?i)\\b(?:[a-z0-9-]{1,63}\\.)+[a-z]{2,63}\\b", s):
+        return True
+    return False
 
 
 # Bio cache helpers to reduce API load
