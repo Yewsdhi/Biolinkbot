@@ -183,6 +183,7 @@ async def add_chat(chat_id: int):
 
 
 async def get_all_chats() -> List[int]:
+    global _CHATS_CACHE
     chat_ids, exp = _CHATS_CACHE
     if exp > _now() and chat_ids:
         # union with extra chat ids
