@@ -68,9 +68,14 @@ python bio.py
    - `/free [reply|id]` → whitelist a user  
    - `/unfree [reply|id]` → remove from whitelist  
    - `/freelist` → view all whitelisted users  
-4. **Owner-only command (PM to bot)**:
+   - `/stats` → show chat protection stats (mode, limit, counts)
+4. General commands:  
+   - `/ping` → check bot latency  
+   - `/id` → show your ID and chat/replied user ID  
+   - `/about` → bot info and helpful links  
+5. **Owner-only command (PM to bot)**:
    - `/broadcast <text>` → sends a message to all groups registered with the bot (only works for `OWNER_ID`)
-5. **Auto-scan:** When a non-whitelisted user posts, their bio is checked—warn/mute/ban applies.  
+6. **Auto-scan:** When a non-whitelisted user posts, their bio is checked—warn/mute/ban applies.  
 
 
 ✨ **Note**: Fork this repo, & Star ☀️ the repo if you liked it. and Share this repo with Proper Credit

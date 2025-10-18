@@ -15,6 +15,12 @@ from config import (
     SPAM_MAX_MSG,
 )
 
+# Fail fast with a clear error if MONGO_URI is not configured
+if not MONGO_URI or "mongodb" not in MONGO_URI:
+    raise ValueError(
+        "MONGO_URI is not configured. Please set a valid MongoDB URI in environment or config.py."
+    )
+
 # Mongo
 mongo_client = AsyncIOMotorClient(MONGO_URI)
 db = mongo_client["telegram_bot_db"]
@@ -196,6 +202,42 @@ async def get_all_chats() -> List[int]:
     chat_ids.update(BROADCAST_EXTRA_CHAT_IDS)
     _CHATS_CACHE = (chat_ids, _now() + CHATS_TTL)
     return list(sorted(chat_ids))
+
+
+# Simple counts and stats helpers
+async def count_warnings(chat_id: int) -> int:
+    """
+    Sum of warning 'count' for a chat.
+    """
+    pipeline = [
+        {"$match": {"chat_id": chat_id}},
+        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$count", 0]}}}},
+    ]
+    cursor = warnings_collection.aggregate(pipeline)
+    docs = await cursor.to_list(length=1)
+    if docs:
+        return int(docs[0].get("total", 0))
+    return 0
+
+
+async def count_warning_records(chat_id: int) -> int:
+    """
+    Number of user records with warnings (not the sum).
+    """
+    return await warnings_collection.count_documents({"chat_id": chat_id})
+
+
+async def count_whitelist(chat_id: int) -> int:
+    return await whitelists_collection.count_documents({"chat_id": chat_id})
+
+
+async def total_chats() -> int:
+    # Use cache if alive
+    chat_ids, exp = _CHATS_CACHE
+    if exp > _now() and chat_ids:
+        return len(chat_ids)
+    # Fallback to DB
+    return await chats_collection.count_documents({})
 
 
 # Bio cache helpers to reduce API load

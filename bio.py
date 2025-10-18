@@ -7,6 +7,7 @@ Channel: https://t.me/TeamXUpdate
 from pyrogram import Client, filters, errors
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
 import asyncio
+import time
 
 from helper.utils import (
     is_admin,
@@ -16,6 +17,7 @@ from helper.utils import (
     add_chat, get_all_chats,
     get_user_profile_cached,
     register_message_event,
+    count_warnings, count_whitelist, total_chats, count_warning_records,
 )
 
 from config import (
@@ -53,31 +55,79 @@ async def start_handler(client: Client, message):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Add Me to Your Group", url=add_url)],
         [
+            InlineKeyboardButton("⚙️ Configure", callback_data="back"),
             InlineKeyboardButton("🛠️ Support", url="https://t.me/TeamsXchat"),
-            InlineKeyboardButton("🗑️ Close", callback_data="close")
-        ]
+        ],
+        [
+            InlineKeyboardButton("📦 Source", url="https://github.com/strad-dev131/BioLink-Protector"),
+            InlineKeyboardButton("🗑️ Close", callback_data="close"),
+        ],
     ])
     await client.send_message(chat_id, text, reply_markup=kb)
-    
+
 @app.on_message(filters.command("help"))
 async def help_handler(client: Client, message):
     chat_id = message.chat.id
     help_text = (
         "**🛠️ Bot Commands & Usage**\n\n"
-        "`/config` – set warn-limit & punishment mode\n"
-        "`/free` – whitelist a user (reply or user/id)\n"
-        "`/unfree` – remove from whitelist\n"
-        "`/freelist` – list all whitelisted users\n\n"
+        "`/config` – set warn-limit & punishment mode (admins)\n"
+        "`/free` – whitelist a user (reply or user/id) (admins)\n"
+        "`/unfree` – remove from whitelist (admins)\n"
+        "`/freelist` – list all whitelisted users (admins)\n"
+        "`/stats` – show chat protection stats (admins)\n"
+        "`/id` – show your ID and chat/replied user ID\n"
+        "`/ping` – check bot latency\n"
+        "`/about` – about and helpful links\n\n"
         "**When someone with a URL in their bio posts, I’ll:**\n"
         " 1. ⚠️ Warn them\n"
         " 2. 🔇 Mute when they exceed the limit (if set)\n"
         " 3. 🔨 Ban when configured to ban\n\n"
         "**Use the inline buttons on warnings to cancel or whitelist**"
     )
+    bot = await client.get_me()
+    add_url = f"https://t.me/{bot.username}?startgroup=true"
     kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Add to Group", url=add_url)],
         [InlineKeyboardButton("🗑️ Close", callback_data="close")]
     ])
     await client.send_message(chat_id, help_text, reply_markup=kb)
+
+@app.on_message(filters.command("ping"))
+async def ping_handler(client: Client, message):
+    start = time.perf_counter()
+    m = await message.reply_text("Pinging...")
+    dt = (time.perf_counter() - start) * 1000
+    await m.edit_text(f"Pong! {dt:.0f} ms")
+
+@app.on_message(filters.command("id"))
+async def id_handler(client: Client, message):
+    uid = message.from_user.id if message.from_user else 0
+    cid = message.chat.id
+    text = [f"👤 Your ID: `{uid}`", f"💬 Chat ID: `{cid}`"]
+    if message.reply_to_message and message.reply_to_message.from_user:
+        text.append(f"↪️ Replied user ID: `{message.reply_to_message.from_user.id}`")
+    await message.reply_text("\n".join(text))
+
+@app.on_message(filters.command("about"))
+async def about_handler(client: Client, message):
+    bot = await client.get_me()
+    add_url = f"https://t.me/{bot.username}?startgroup=true"
+    text = (
+        "**BioLink Protector**\n"
+        "Protect your groups by detecting links in user bios and applying warnings, mutes, or bans.\n\n"
+        "• Fast and reliable (cached admin checks, reduced API/DB calls)\n"
+        "• Flexible configuration per chat\n"
+        "• Owner broadcast support\n"
+    )
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Add to Group", url=add_url)],
+        [
+            InlineKeyboardButton("📦 Source", url="https://github.com/strad-dev131/BioLink-Protector"),
+            InlineKeyboardButton("🛠️ Support", url="https://t.me/TeamsXchat"),
+        ],
+        [InlineKeyboardButton("🗑️ Close", callback_data="close")],
+    ])
+    await message.reply_text(text, reply_markup=kb)
 
 @app.on_message(filters.group & filters.command("config"))
 async def configure(client: Client, message):
@@ -181,6 +231,28 @@ async def command_freelist(client: Client, message):
 
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🗑️ Close", callback_data="close")]])
     await client.send_message(chat_id, text, reply_markup=keyboard)
+
+
+@app.on_message(filters.group & filters.command("stats"))
+async def stats_handler(client: Client, message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    if not await is_admin(client, chat_id, user_id):
+        return
+
+    mode, limit, penalty = await get_config(chat_id)
+    wl_count = await count_whitelist(chat_id)
+    warn_records = await count_warning_records(chat_id) if 'count_warning_records' in globals() else 0  # safe guard
+    warn_total = await count_warnings(chat_id)
+
+    text = (
+        "**📊 Chat Protection Stats**\n\n"
+        f"• Mode: `{mode}` | Penalty: `{penalty}` | Limit: `{limit}`\n"
+        f"• Whitelisted users: `{wl_count}`\n"
+        f"• Users with warnings: `{warn_records}`\n"
+        f"• Total warning count: `{warn_total}`\n"
+    )
+    await message.reply_text(text)
 
 
 # Owner-only broadcast command
