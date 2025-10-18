@@ -16,8 +16,8 @@
 
 ## Features
 
-- Automatically checks user bios for links when they send a message in the group.
-- Configurable **warnings**, **mutes**, and **bans** for users with links in their bios.
+- Automatically checks user bios and message text for links when users post in the group.
+- Configurable **warnings**, **mutes**, and **bans** for users with links in their bios or messages.
 - **Whitelist** & **Unwhitelist** trusted members  
 - **Cancel Warning** reset a user’s warnings  
 - **Admin-only controls** with interactive inline keyboards
@@ -75,7 +75,7 @@ python bio.py
    - `/about` → bot info and helpful links  
 5. **Owner-only command (PM to bot)**:
    - `/broadcast <text>` → sends a message to all groups registered with the bot (only works for `OWNER_ID`)
-6. **Auto-scan:** When a non-whitelisted user posts, their bio is checked—warn/mute/ban applies.  
+6. **Auto-scan:** When a non-whitelisted user posts, their bio and message text are checked—warn/mute/ban applies.  
 
 
 ✨ **Note**: Fork this repo, & Star ☀️ the repo if you liked it. and Share this repo with Proper Credit
@@ -97,6 +97,7 @@ Feel free to reach out if you have any questions or feedback.
   - IPv4/IPv6 addresses with optional ports
   - emails
   - Telegram @usernames
+  - obfuscated formats: `dot`/`[.]`, `(dot)`, spaces in `://` and `www.`, zero‑width characters, `hxxp` → `http`, `t . me` → `t.me`
 - Faster and more reliable:
   - Admin check optimized with get_chat_member + caching
   - Config and whitelist caching to reduce DB round-trips

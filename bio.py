@@ -18,6 +18,7 @@ from helper.utils import (
     get_user_profile_cached,
     register_message_event,
     count_warnings, count_whitelist, total_chats, count_warning_records,
+    contains_link,
 )
 
 from config import (
@@ -448,38 +449,45 @@ async def check_bio(client: Client, message):
     # Register message for spam tracking
     is_spammer = register_message_event(chat_id, user_id)
 
-    if URL_PATTERN.search(bio):
-        try:
-            await message.delete()
-        except errors.MessageDeleteForbidden:
-            return await message.reply_text("Please grant me delete permission.")
+    # Normalize and detect links in both message text and bio
+    text_content = message.text or message.caption or ""
+    bio_has_link = contains_link(bio)
+    msg_has_link = contains_link(text_content) if text_content else False
 
-        # If user is mass spamming and has link in bio, apply immediate penalty
+    if bio_has_link or msg_has_link:
+        # Try to delete offending message if link is in message content
+        if msg_has_link:
+            try:
+                await message.delete()
+            except errors.MessageDeleteForbidden:
+                await message.reply_text("Please grant me delete permission.")
+
+        # If user is mass spamming with link (bio or message), apply immediate penalty
         if is_spammer:
             try:
-                # Default to mute for immediate action; respect configured penalty if available
                 _, _, penalty = await get_config(chat_id)
                 if penalty == "mute":
                     await client.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False))
                     kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unmute ✅", callback_data=f"unmute_{user_id}")]])
-                    await message.reply_text(f"**{mention} has been 🔇 muted for mass spamming with link in bio.**", reply_markup=kb)
+                    await message.reply_text(f"**{mention} has been 🔇 muted for mass spamming with link.**", reply_markup=kb)
                 else:
                     await client.ban_chat_member(chat_id, user_id)
                     kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unban ✅", callback_data=f"unban_{user_id}")]])
-                    await message.reply_text(f"**{mention} has been 🔨 banned for mass spamming with link in bio.**", reply_markup=kb)
+                    await message.reply_text(f"**{mention} has been 🔨 banned for mass spamming with link.**", reply_markup=kb)
             except errors.ChatAdminRequired:
                 await message.reply_text("I don't have permission to restrict/ban users.")
             return
 
         mode, limit, penalty = await get_config(chat_id)
+        reason_src = "message" if msg_has_link else "bio"
         if mode == "warn":
             count = await increment_warning(chat_id, user_id)
             warning_text = (
                 "**🚨 Warning Issued** 🚨\\n\\n"
                 f"👤 **User:** {mention} `[{user_id}]`\\n"
-                "❌ **Reason:** URL found in bio\\n"
+                f"❌ **Reason:** URL found in {reason_src}\\n"
                 f"⚠️ **Warning:** {count}/{limit}\\n\\n"
-                "**Notice: Please remove any links from your bio.**"
+                "**Notice: Please remove any links from your bio or messages.**"
             )
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("❌ Cancel Warning", callback_data=f"cancel_warn_{user_id}"),
@@ -492,12 +500,11 @@ async def check_bio(client: Client, message):
                     if penalty == "mute":
                         await client.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False))
                         kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unmute ✅", callback_data=f"unmute_{user_id}")]])
-                        await sent.edit_text(f"**{mention} has been 🔇 muted for [Link In Bio].**", reply_markup=kb)
+                        await sent.edit_text(f"**{mention} has been 🔇 muted for [Link In {reason_src.capitalize()}].**", reply_markup=kb)
                     else:
                         await client.ban_chat_member(chat_id, user_id)
                         kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unban ✅", callback_data=f"unban_{user_id}")]])
-                        await sent.edit_text(f"**{mention} has been 🔨 banned for [Link In Bio].**", reply_markup=kb)
-                
+                        await sent.edit_text(f"**{mention} has been 🔨 banned for [Link In {reason_src.capitalize()}].**", reply_markup=kb)
                 except errors.ChatAdminRequired:
                     await sent.edit_text(f"**I don't have permission to {penalty} users.**")
         else:
@@ -505,11 +512,11 @@ async def check_bio(client: Client, message):
                 if mode == "mute":
                     await client.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False))
                     kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unmute", callback_data=f"unmute_{user_id}")]])
-                    await message.reply_text(f"{mention} has been 🔇 muted for [Link In Bio].", reply_markup=kb)
+                    await message.reply_text(f"{mention} has been 🔇 muted for [Link In {reason_src.capitalize()}].", reply_markup=kb)
                 else:
                     await client.ban_chat_member(chat_id, user_id)
                     kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unban", callback_data=f"unban_{user_id}")]])
-                    await message.reply_text(f"{mention} has been 🔨 banned for [Link In Bio].", reply_markup=kb)
+                    await message.reply_text(f"{mention} has been 🔨 banned for [Link In {reason_src.capitalize()}].", reply_markup=kb)
             except errors.ChatAdminRequired:
                 return await message.reply_text(f"I don't have permission to {mode} users.")
     else:
