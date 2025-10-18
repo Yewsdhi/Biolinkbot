@@ -37,6 +37,22 @@
     "MONGO_URI": {
       "description": "Your MongoDB connection string (e.g., from MongoDB Atlas)",
       "required": true
+    },
+    "OWNER_ID": {
+      "description": "Your Telegram numeric user ID to enable /broadcast command",
+      "required": true
+    },
+    "BROADCAST_CHAT_IDS": {
+      "description": "Optional: Comma-separated chat IDs to include in broadcasts (e.g., 12345,-100987654321)",
+      "required": false
+    },
+    "SPAM_WINDOW_SEC": {
+      "description": "Seconds for spam detection window",
+      "required": false
+    },
+    "SPAM_MAX_MSG": {
+      "description": "Max messages allowed in spam detection window",
+      "required": false
     }
   },
   "addons": [],

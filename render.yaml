@@ -15,3 +15,11 @@ services:
         sync: false
       - key: MONGO_URI
         sync: false
+      - key: OWNER_ID
+        sync: false
+      - key: BROADCAST_CHAT_IDS
+        sync: false
+      - key: SPAM_WINDOW_SEC
+        sync: false
+      - key: SPAM_MAX_MSG
+        sync: false

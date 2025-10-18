@@ -6,19 +6,24 @@ Channel: https://t.me/TeamXUpdate
 
 from pyrogram import Client, filters, errors
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
+import asyncio
 
 from helper.utils import (
     is_admin,
     get_config, update_config,
     increment_warning, reset_warnings,
-    is_whitelisted, add_whitelist, remove_whitelist, get_whitelist
+    is_whitelisted, add_whitelist, remove_whitelist, get_whitelist,
+    add_chat, get_all_chats,
+    get_user_profile_cached,
+    register_message_event,
 )
 
 from config import (
     API_ID,
     API_HASH,
     BOT_TOKEN,
-    URL_PATTERN
+    URL_PATTERN,
+    OWNER_ID,
 )
 
 app = Client(
@@ -31,6 +36,8 @@ app = Client(
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message):
     chat_id = message.chat.id
+    # Register this chat (private or group) for broadcasts
+    await add_chat(chat_id)
     bot = await client.get_me()
     add_url = f"https://t.me/{bot.username}?startgroup=true"
     text = (
@@ -175,6 +182,50 @@ async def command_freelist(client: Client, message):
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🗑️ Close", callback_data="close")]])
     await client.send_message(chat_id, text, reply_markup=keyboard)
 
+
+# Owner-only broadcast command
+@app.on_message(filters.private & filters.command("broadcast"))
+async def broadcast_handler(client: Client, message):
+    # Only the configured OWNER_ID can use this command
+    if OWNER_ID <= 0 or message.from_user.id != OWNER_ID:
+        return
+
+    # Extract broadcast text
+    if len(message.command) > 1:
+        text = message.text.split(maxsplit=1)[1]
+    elif message.reply_to_message:
+        text = message.reply_to_message.text or message.reply_to_message.caption or ""
+    else:
+        return await message.reply_text("Send /broadcast <text> or reply to a message.")
+
+    # Fetch all known chats and send concurrently with small throttling
+    chat_ids = await get_all_chats()
+    if not chat_ids:
+        return await message.reply_text("No chats registered.")
+
+    await message.reply_text(f"Broadcasting to {len(chat_ids)} chats...")
+
+    async def _send(cid: int):
+        try:
+            await client.send_message(cid, text)
+        except errors.ChatWriteForbidden:
+            # Bot removed or can't write; ignore
+            pass
+        except Exception:
+            # Any other send error; ignore to continue broadcast
+            pass
+
+    # Limit concurrency to avoid hitting flood limits
+    sem = asyncio.Semaphore(10)
+
+    async def _worker(cid: int):
+        async with sem:
+            await _send(cid)
+            await asyncio.sleep(0.1)  # light spacing
+
+    await asyncio.gather(*(_worker(cid) for cid in chat_ids))
+    await message.reply_text("Broadcast finished.")
+
 @app.on_callback_query()
 async def callback_handler(client: Client, callback_query):
     data = callback_query.data
@@ -304,6 +355,9 @@ async def callback_handler(client: Client, callback_query):
 async def check_bio(client: Client, message):
     chat_id = message.chat.id
 
+    # Register chat for broadcast registry
+    await add_chat(chat_id)
+
     # Skip service messages or bot messages
     if not message.from_user or message.from_user.is_bot:
         return
@@ -312,26 +366,38 @@ async def check_bio(client: Client, message):
     if await is_admin(client, chat_id, user_id) or await is_whitelisted(chat_id, user_id):
         return
 
-    # Prefer get_chat for bio; fallback to get_users
-    try:
-        chat = await client.get_chat(user_id)
-        bio = getattr(chat, "bio", "") or ""
-        first_name = getattr(chat, "first_name", "") or ""
-        last_name = getattr(chat, "last_name", None)
-    except Exception:
-        usr = await client.get_users(user_id)
-        bio = getattr(usr, "bio", "") or ""
-        first_name = getattr(usr, "first_name", "") or ""
-        last_name = getattr(usr, "last_name", None)
+    # Fast path: cached profile to reduce API calls
+    from helper.utils import get_user_profile_cached
+    bio, first_name, last_name = await get_user_profile_cached(client, user_id)
 
     full_name = f"{first_name}{(' ' + last_name) if last_name else ''}"
     mention = f"[{full_name}](tg://user?id={user_id})"
+
+    # Register message for spam tracking
+    is_spammer = register_message_event(chat_id, user_id)
 
     if URL_PATTERN.search(bio):
         try:
             await message.delete()
         except errors.MessageDeleteForbidden:
             return await message.reply_text("Please grant me delete permission.")
+
+        # If user is mass spamming and has link in bio, apply immediate penalty
+        if is_spammer:
+            try:
+                # Default to mute for immediate action; respect configured penalty if available
+                _, _, penalty = await get_config(chat_id)
+                if penalty == "mute":
+                    await client.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False))
+                    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unmute ✅", callback_data=f"unmute_{user_id}")]])
+                    await message.reply_text(f"**{mention} has been 🔇 muted for mass spamming with link in bio.**", reply_markup=kb)
+                else:
+                    await client.ban_chat_member(chat_id, user_id)
+                    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Unban ✅", callback_data=f"unban_{user_id}")]])
+                    await message.reply_text(f"**{mention} has been 🔨 banned for mass spamming with link in bio.**", reply_markup=kb)
+            except errors.ChatAdminRequired:
+                await message.reply_text("I don't have permission to restrict/ban users.")
+            return
 
         mode, limit, penalty = await get_config(chat_id)
         if mode == "warn":

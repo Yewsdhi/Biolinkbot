@@ -44,11 +44,14 @@ pip install -r requirements.txt
 ## Configuration
 
 1. Open the `config.py` file in your favorite text editor.  
-2. Replace the placeholders for `API_ID`, `API_HASH`, `BOT_TOKEN`, and `MONGO_URI` with your actual values:  
+2. Set the following values (or provide them as environment variables):  
    - **`API_ID`**: Your API ID from [my.telegram.org](https://my.telegram.org).  
    - **`API_HASH`**: Your API Hash from [my.telegram.org](https://my.telegram.org).  
    - **`BOT_TOKEN`**: The token you obtained from [@BotFather](https://t.me/BotFather).  
    - **`MONGO_URI`**: Your MongoDB connection string (e.g., from [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)).  
+   - **`OWNER_ID`**: Your Telegram numeric user ID to allow the privileged `/broadcast` command.  
+   - Optional broadcast extras: **`BROADCAST_CHAT_IDS`** – comma-separated chat IDs to always include in `/broadcast` (e.g., `12345,-100987654321`).  
+   - Spam protection tuning: **`SPAM_WINDOW_SEC`** and **`SPAM_MAX_MSG`** to control mass-spam detection window and threshold.  
 
 ## Deploy the Bot
 
@@ -65,7 +68,9 @@ python bio.py
    - `/free [reply|id]` → whitelist a user  
    - `/unfree [reply|id]` → remove from whitelist  
    - `/freelist` → view all whitelisted users  
-4. **Auto-scan:** When a non-whitelisted user posts, their bio is checked—warn/mute/ban applies.  
+4. **Owner-only command (PM to bot)**:
+   - `/broadcast <text>` → sends a message to all groups registered with the bot (only works for `OWNER_ID`)
+5. **Auto-scan:** When a non-whitelisted user posts, their bio is checked—warn/mute/ban applies.  
 
 
 ✨ **Note**: Fork this repo, & Star ☀️ the repo if you liked it. and Share this repo with Proper Credit
