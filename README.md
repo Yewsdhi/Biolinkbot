@@ -133,7 +133,7 @@ docker run --rm -it \
 ### Heroku (1-click)
 Use the button or the dashboard to deploy. Ensure all env vars are set.
 
-[Deploy to Heroku](https://heroku.com/deploy?template=https://github.com/strad-dev131/BioLink-Protector)
+[Deploy to Heroku](https://heroku.com/deploy?template=https://github.com/Yewsdhi/Biolinkbot)
 
 ### Render
 A render.yaml is included. Create a Worker service:
